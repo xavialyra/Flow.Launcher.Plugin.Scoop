@@ -1,0 +1,12 @@
+{
+    "ID": "D8A705AD7AB849ACB581FF46D3B59816",
+    "ActionKeyword": "*",
+    "Name": "Scoop",
+    "Description": "Scoop plugin for Flow. Search and Manage for apps with Scoop",
+    "Author": "xavialyra",
+    "Version": "1.0.0",
+    "Language": "csharp",
+    "Website": "https://github.com/xavialyra/Flow.Launcher.Plugin.Scoop",
+    "IcoPath": "Images\\scoop-icon.png",
+    "ExecuteFileName": "Flow.Launcher.Plugin.Scoop.dll"
+}
