@@ -28,8 +28,13 @@ public class ListHelper
 
             try
             {
-                var manifestJsonDocument = JsonDocument.Parse(File.ReadAllText(manifestPath));
-                var version = manifestJsonDocument.RootElement.TryGetProperty("version", out var versionElement)
+                var docResult = JsonDocument.Parse(File.ReadAllText(manifestPath));
+                
+                var manifest = docResult.RootElement.ValueKind == JsonValueKind.Array
+                    ? docResult.RootElement[0]
+                    : docResult.RootElement;
+                
+                var version = manifest.TryGetProperty("version", out var versionElement)
                     ? versionElement.GetString()
                     : "unknown";
 
@@ -40,9 +45,9 @@ public class ListHelper
 
                 if (bucketName != null && currBucketName != bucketName) continue;
 
-                var bin = manifestJsonDocument.RootElement.TryGetProperty("shortcuts", out var shortcutsElement)
+                var bin = manifest.TryGetProperty("shortcuts", out var shortcutsElement)
                     ? GetFirstShortcutPath(shortcutsElement)
-                    : manifestJsonDocument.RootElement.TryGetProperty("bin", out var binElement)
+                    : manifest.TryGetProperty("bin", out var binElement)
                         ? GetFirstShortcutPath(binElement)
                         : null;
 
@@ -62,16 +67,20 @@ public class ListHelper
                         FileName = bin,
                         Path = appCurrPath,
                         Icon = icon,
-                        Checkver = manifestJsonDocument.RootElement.TryGetProperty("checkver", out var checkverElement)
+                        Checkver = manifest.TryGetProperty("checkver", out var checkverElement)
                             ? JsonNode.Parse(checkverElement.GetRawText())
                             : null,
-                        Homepage = manifestJsonDocument.RootElement.TryGetProperty("homepage", out var homePage)
+                        Homepage = manifest.TryGetProperty("homepage", out var homePage) && homePage.ValueKind == JsonValueKind.String
                             ? homePage.GetString()
                             : null,
-                        Description =
-                            manifestJsonDocument.RootElement.TryGetProperty("description", out var description)
-                                ? description.GetString()
-                                : null
+                        Description = manifest.TryGetProperty("description", out var description)
+                            ? description.ValueKind switch
+                            {
+                                JsonValueKind.String => description.GetString(),
+                                JsonValueKind.Array when description.GetArrayLength() > 0 && description[0].ValueKind == JsonValueKind.String => description[0].GetString(),
+                                _ => null
+                            }
+                            : null
                     });
                 }
 

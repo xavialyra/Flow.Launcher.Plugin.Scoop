@@ -99,7 +99,14 @@ public class SearchHelper
         try
         {
             docResult = JsonDocument.Parse(content);
-            var manifest = docResult.RootElement;
+            var manifest = docResult.RootElement.ValueKind == JsonValueKind.Array
+                ? docResult.RootElement[0]
+                : docResult.RootElement;
+
+            if (manifest.ValueKind != JsonValueKind.Object)
+            {
+                return;
+            }
 
             if (!manifest.TryGetProperty("version", out var versionElement))
             {
@@ -127,18 +134,25 @@ public class SearchHelper
                     Checkver = manifest.TryGetProperty("checkver", out var checkverElement)
                         ? JsonNode.Parse(checkverElement.GetRawText())
                         : null,
-                    Homepage = manifest.TryGetProperty("homepage", out var homePage)
+                    Homepage = manifest.TryGetProperty("homepage", out var homePage) && homePage.ValueKind == JsonValueKind.String
                         ? homePage.GetString()
                         : null,
                     Description = manifest.TryGetProperty("description", out var description)
-                        ? description.GetString()
+                        ? description.ValueKind switch
+                        {
+                            JsonValueKind.String => description.GetString(),
+                            JsonValueKind.Array when description.GetArrayLength() > 0 && description[0].ValueKind == JsonValueKind.String => description[0].GetString(),
+                            _ => null
+                        }
                         : null
                 };
+
                 results.Add(match);
             }
         }
-        catch (JsonException)
+        catch
         {
+            // ignore
         }
         finally
         {
