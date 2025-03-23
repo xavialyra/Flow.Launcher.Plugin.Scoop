@@ -34,3 +34,4 @@ This plugin provides the following functionality:
         *   **Open Homepage:** Opens the application's homepage in your browser.
         *   **Install:** Installs the application using Scoop.
 
+![PixPin_2025-03-23_18-24-14](https://github.com/user-attachments/assets/d3583a01-03a3-4a38-afe4-3d55ba142cf0)
