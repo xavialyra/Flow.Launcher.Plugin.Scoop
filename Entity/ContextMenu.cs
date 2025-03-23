@@ -32,8 +32,8 @@ public class ContextMenu : IContextMenu
         {
             new()
             {
-                Title = $"From bucket: {resultContext.Match.Bucket}, version: {resultContext.Match.Version}",
-                SubTitle = "Click to check new version",
+                Title = $"From bucket {resultContext.Match.Bucket}",
+                SubTitle = $"Version: {resultContext.Match.Version}, click to check new version",
                 Icon = selectedResult.Icon,
                 AsyncAction = async _ =>
                 {
