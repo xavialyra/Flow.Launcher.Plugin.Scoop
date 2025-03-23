@@ -1,6 +1,6 @@
 {
     "ID": "D8A705AD7AB849ACB581FF46D3B59816",
-    "ActionKeyword": "*",
+    "ActionKeyword": "scoop",
     "Name": "Scoop",
     "Description": "Scoop plugin for Flow. Search and Manage for apps with Scoop",
     "Author": "xavialyra",
