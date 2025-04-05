@@ -255,4 +255,31 @@ public class VersionChecker
             ? Regex.Replace(match.Value, regexPattern, replacePattern)
             : match.Groups[1].Value;
     }
+
+    public static bool IsSameVersion(string? version1, string? version2)
+    {
+        if (string.IsNullOrEmpty(version1) || string.IsNullOrEmpty(version2)) return false;
+
+        try
+        {
+            if (version1.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+            {
+                version1 = version1[1..];
+            }
+
+            if (version2.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+            {
+                version2 = version2[1..];
+            }
+
+            var v1 = new Version(version1);
+            var v2 = new Version(version2);
+
+            return v1.Equals(v2);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
 }

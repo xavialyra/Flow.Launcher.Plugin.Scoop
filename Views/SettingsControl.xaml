@@ -1,0 +1,33 @@
+<UserControl x:Class="Flow.Launcher.Plugin.Scoop.Views.SettingsControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             xmlns:entity="clr-namespace:Flow.Launcher.Plugin.Scoop.Entity"
+             d:DataContext="{d:DesignInstance Type=entity:Settings, IsDesignTimeCreatable=True}"
+             d:DesignHeight="50" d:DesignWidth="500"
+             MinWidth="400" Margin="10">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Grid.Column="0"
+                   Text="Scoop Home Path:"
+                   VerticalAlignment="Center"
+                   Margin="60,0,10,0"
+                   HorizontalAlignment="Left"/> 
+
+        <TextBox Grid.Row="0" Grid.Column="1"
+                 Width="300"
+                 Text="{Binding ScoopHome, UpdateSourceTrigger=PropertyChanged}"
+                 VerticalAlignment="Center"
+                 ToolTip="The installation directory for Scoop (e.g., C:\Users\YourUser\Scoop). Leave empty to attempt auto-detection."
+                 HorizontalAlignment="Left"/>
+    </Grid>
+</UserControl>
