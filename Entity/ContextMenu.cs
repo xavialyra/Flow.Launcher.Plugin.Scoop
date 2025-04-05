@@ -38,21 +38,31 @@ public class ContextMenu : IContextMenu
                 AsyncAction = async _ =>
                 {
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                    var latestVersion = await new VersionChecker(resultContext.Match)
-                        .GetLatestVersionAsync(cts.Token);
-                    if (latestVersion == null)
+                    try
                     {
-                        _context.API.ShowMsgError("Error", "Failed to check new version.");
+                        var latestVersion = await new VersionChecker(resultContext.Match)
+                            .GetLatestVersionAsync(cts.Token);
+
+                        if (latestVersion == null)
+                        {
+                            _context.API.ShowMsgError("Error", $"Failed to check new version for {resultContext.Match.Name}.");
+                            return false;
+                        }
+
+                        if (latestVersion == resultContext.Match.Version)
+                        {
+                            _context.API.ShowMsg("No update", $"The version {resultContext.Match.Version} for {resultContext.Match.Name} is already the latest version.");
+                            return false;
+                        }
+
+                        _context.API.ShowMsg("New version", $"The latest version of {resultContext.Match.Name} is {latestVersion}.");
                         return false;
                     }
-
-                    if (latestVersion == resultContext.Match.Version)
+                    catch (Exception)
                     {
-                        _context.API.ShowMsg("No update", "The selected app is already the latest version.");
-                        return false;
+                        // ignore
                     }
 
-                    _context.API.ShowMsg("New version", $"The latest version is {latestVersion}.");
                     return false;
                 }
             },
@@ -72,10 +82,10 @@ public class ContextMenu : IContextMenu
                 Title = "Update",
                 SubTitle = "Update the selected app",
                 Icon = () => ScoopInstance.UpdateIcon,
-                Action = _ =>
+                AsyncAction = async _ =>
                 {
-                    ScoopPwshExecutor.UpdateAsync(resultContext.Match, _context);
-                    return true;
+                    await ScoopPwshExecutor.UpdateAsync(resultContext.Match, _context);
+                    return false;
                 }
             },
             new()
@@ -83,10 +93,10 @@ public class ContextMenu : IContextMenu
                 Title = "Uninstall",
                 SubTitle = "Uninstall the selected app",
                 Icon = () => ScoopInstance.TrashIcon,
-                Action = _ =>
+                AsyncAction = async _ =>
                 {
-                    ScoopPwshExecutor.UninstallAsync(resultContext.Match, _context);
-                    return true;
+                    await ScoopPwshExecutor.UninstallAsync(resultContext.Match, _context);
+                    return false;
                 }
             },
             new()
@@ -94,10 +104,10 @@ public class ContextMenu : IContextMenu
                 Title = "Reset",
                 SubTitle = "Reset the selected app",
                 Icon = () => ScoopInstance.ResetIcon,
-                Action = _ =>
+                AsyncAction = async _ =>
                 {
-                    ScoopPwshExecutor.ResetAsync(resultContext.Match, _context);
-                    return true;
+                    await ScoopPwshExecutor.ResetAsync(resultContext.Match, _context);
+                    return false;
                 }
             }
         };
@@ -131,10 +141,10 @@ public class ContextMenu : IContextMenu
                 Title = "Install",
                 SubTitle = "Install the selected app",
                 Icon = () => ScoopInstance.InstallIcon,
-                Action = _ =>
+                AsyncAction = async _ =>
                 {
-                    ScoopPwshExecutor.InstallAsync(resultContext.Match, _context);
-                    return true;
+                    await ScoopPwshExecutor.InstallAsync(resultContext.Match, _context);
+                    return false;
                 }
             }
         };

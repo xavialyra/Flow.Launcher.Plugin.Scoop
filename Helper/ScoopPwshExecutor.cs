@@ -1,37 +1,31 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Security.Principal;
-using System.Text;
+using System.Threading.Tasks;
 using Flow.Launcher.Plugin.Scoop.Entity;
 
 namespace Flow.Launcher.Plugin.Scoop.Helper;
 
 public class ScoopPwshExecutor
 {
-
-    public static void ExecuteCommand(string command)
+    public static async Task ExecuteCommandAsync(string command)
     {
-
-        var shellExecutable = "pwsh.exe";
-
+        string shellExecutable = "pwsh.exe";
         try
         {
-            ExecuteCommandWithShell(shellExecutable, command);
+            await ExecuteCommandWithShellAsync(shellExecutable, command);
         }
-        catch (Exception ex) when (ex is Win32Exception || ex is Win32Exception ||
-                                   ex.Message.Contains("not found") || ex.Message.Contains("not recognized"))
+        catch (Exception ex) when (ex is Win32Exception || ex.Message.Contains("not found") ||
+                                   ex.Message.Contains("not recognized"))
         {
             shellExecutable = "powershell.exe";
             try
             {
-                ExecuteCommandWithShell(shellExecutable, command);
+                await ExecuteCommandWithShellAsync(shellExecutable, command);
             }
-            catch (Exception innerEx) when
-                (innerEx is Win32Exception or Win32Exception)
+            catch (Exception innerEx) when (innerEx is Win32Exception)
             {
-                if ((innerEx as Win32Exception)?.NativeErrorCode == 1223 ||
-                    (innerEx as Win32Exception)?.NativeErrorCode == 1223)
+                if ((innerEx as Win32Exception)?.NativeErrorCode == 1223)
                 {
                     throw new Exception("The operation was cancelled by the user.", innerEx);
                 }
@@ -42,48 +36,66 @@ public class ScoopPwshExecutor
                         $"{shellExecutable} was also not found.  Both pwsh.exe and powershell.exe failed to start.",
                         innerEx);
                 }
+
                 throw;
             }
         }
     }
 
-
-    private static void ExecuteCommandWithShell(string shellExecutable, string command)
+    private static async Task ExecuteCommandWithShellAsync(string shellExecutable, string command)
     {
         using var process = new Process();
         process.StartInfo.FileName = shellExecutable;
         process.StartInfo.Arguments = $"-NoProfile -ExecutionPolicy unrestricted -Command \"{command}\"";
         process.StartInfo.CreateNoWindow = true;
-        process.StartInfo.UseShellExecute = true;
-        process.StartInfo.RedirectStandardOutput = false;
-        process.StartInfo.RedirectStandardError = false;
+        process.StartInfo.UseShellExecute = false;
+        process.StartInfo.RedirectStandardOutput = true;
+        process.StartInfo.RedirectStandardError = true;
         process.StartInfo.Verb = "runas";
 
-        process.Start();
-        process.WaitForExit();
+        string output = null;
+        string error = null;
 
-        try
+        process.OutputDataReceived += (sender, e) =>
         {
-            process.Start();
-            process.WaitForExit();
-        }
-        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+            if (!string.IsNullOrEmpty(e.Data))
+            {
+                output += e.Data + Environment.NewLine;
+            }
+        };
+
+        process.ErrorDataReceived += (sender, e) =>
         {
-            throw new Exception("The operation was cancelled by the user.", ex);
-        }
+            if (!string.IsNullOrEmpty(e.Data))
+            {
+                error += e.Data + Environment.NewLine;
+            }
+        };
+
+        process.Start();
+
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        await Task.Run(() => process.WaitForExit());
 
         if (process.ExitCode != 0)
         {
-            throw new Exception($"{shellExecutable} script execution failed (Process). Exit code: {process.ExitCode}");
+            throw new Exception(
+                $"{shellExecutable} script execution failed (Process). Exit code: {process.ExitCode}.  Error Output: {error}");
         }
     }
 
-    public static void InstallAsync(Match match, PluginInitContext context)
+    public static async Task InstallAsync(Match match, PluginInitContext context)
     {
         try
         {
-            context.API.ShowMsg($"install {match.Name}");
-            ExecuteCommand($"scoop install {match.Bucket}/{match.Name}");
+            context.API.ShowMsg(
+                title: $"Install {match.Name}",
+                subTitle: $"bucket {match.Bucket} version {match.Version}"
+            );
+            await ExecuteCommandAsync($"scoop install {match.Bucket}/{match.Name}");
+            // context.API.HideMainWindow();
             context.API.ShowMsg("Install finished");
         }
         catch (Exception e)
@@ -93,13 +105,16 @@ public class ScoopPwshExecutor
         }
     }
 
-    public static void UninstallAsync(Match match, PluginInitContext context)
+    public static async Task UninstallAsync(Match match, PluginInitContext context)
     {
         try
         {
-            context.API.ShowMsg($"uninstall {match.Name}");
-            ExecuteCommand($"scoop uninstall {match.Bucket}/{match.Name}");
-            context.API.ShowMsg("Uninstall finished");
+            context.API.ShowMsg(
+                title: $"uninstall {match.Name}",
+                subTitle: $"bucket {match.Bucket} version {match.Version}"
+            );
+            await ExecuteCommandAsync($"scoop uninstall {match.Bucket}/{match.Name}");
+            context.API.ShowMsg($"Uninstall finished: {match.Name}");
         }
         catch (Exception e)
         {
@@ -108,13 +123,16 @@ public class ScoopPwshExecutor
         }
     }
 
-    public static void UpdateAsync(Match match, PluginInitContext context)
+    public static async Task UpdateAsync(Match match, PluginInitContext context)
     {
         try
         {
-            context.API.ShowMsg($"update {match.Name}");
-            ExecuteCommand($"scoop update {match.Bucket}/{match.Name}");
-            context.API.ShowMsg("Update finished");
+            context.API.ShowMsg(
+                title: $"update {match.Name}",
+                subTitle: $"bucket: {match.Bucket}"
+            );
+            await ExecuteCommandAsync($"scoop update {match.Bucket}/{match.Name}");
+            context.API.ShowMsg($"Update finished: {match.Name}");
         }
         catch (Exception e)
         {
@@ -123,13 +141,16 @@ public class ScoopPwshExecutor
         }
     }
 
-    public static void ResetAsync(Match match, PluginInitContext context)
+    public static async Task ResetAsync(Match match, PluginInitContext context)
     {
         try
         {
-            context.API.ShowMsg($"reset {match.Name}");
-            ExecuteCommand($"scoop reset {match.Bucket}/{match.Name}");
-            context.API.ShowMsg("Reset finished");
+            context.API.ShowMsg(
+                title: $"reset {match.Name}",
+                subTitle: $"bucket: {match.Bucket} version {match.Version}"
+            );
+            await ExecuteCommandAsync($"scoop reset {match.Bucket}/{match.Name}");
+            context.API.ShowMsg($"Reset finished: {match.Name}");
         }
         catch (Exception e)
         {
