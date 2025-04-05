@@ -45,17 +45,20 @@ public class ContextMenu : IContextMenu
 
                         if (latestVersion == null)
                         {
-                            _context.API.ShowMsgError("Error", $"Failed to check new version for {resultContext.Match.Name}.");
+                            _context.API.ShowMsgError("Error",
+                                $"Failed to check new version for {resultContext.Match.Name}.");
                             return false;
                         }
 
-                        if (latestVersion == resultContext.Match.Version)
+                        if (VersionChecker.IsSameVersion(latestVersion, resultContext.Match.Version))
                         {
-                            _context.API.ShowMsg("No update", $"The version {resultContext.Match.Version} for {resultContext.Match.Name} is already the latest version.");
+                            _context.API.ShowMsg("No update",
+                                $"The version {resultContext.Match.Version} for {resultContext.Match.Name} is already the latest version.");
                             return false;
                         }
 
-                        _context.API.ShowMsg("New version", $"The latest version of {resultContext.Match.Name} is {latestVersion}.");
+                        _context.API.ShowMsg("New version",
+                            $"The latest version of {resultContext.Match.Name} is {latestVersion}.");
                         return false;
                     }
                     catch (Exception)
