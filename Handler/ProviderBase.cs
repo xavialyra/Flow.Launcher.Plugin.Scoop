@@ -24,16 +24,17 @@ public abstract class ProviderBase
         }
     };
 
-    private List<Result> ScoopNotInstalled => new()
+    private List<Result> ScoopDetectionFailedResult => new()
     {
         new Result
         {
-            Title = "Scoop is not installed",
-            SubTitle = "Click to open Scoop installation page.",
+            Title = "Scoop installation not detected",
+            SubTitle = "You can specify the correct path in this plugin's settings.",
             Icon = () => ScoopInstance.ScoopIcon,
             Action = _ =>
             {
-                _context.API.OpenUrl("https://scoop.sh/");
+                // _context.API.OpenUrl("https://scoop.sh/");  scoopRootPath
+                _context.API.OpenSettingDialog();
                 return false;
             }
         }
@@ -45,7 +46,7 @@ public abstract class ProviderBase
     {
         if (string.IsNullOrWhiteSpace(ScoopInstance.ScoopHomePath))
         {
-            return Task.FromResult(ScoopNotInstalled);
+            return Task.FromResult(ScoopDetectionFailedResult);
         }
 
         return GetResultAsync(keyword)
