@@ -4,7 +4,7 @@
     "Name": "Scoop",
     "Description": "Scoop plugin for Flow. Search and Manage for apps with Scoop",
     "Author": "xavialyra",
-    "Version": "1.0.0",
+    "Version": "1.0.1",
     "Language": "csharp",
     "Website": "https://github.com/xavialyra/Flow.Launcher.Plugin.Scoop",
     "IcoPath": "Images\\scoop-icon.png",
