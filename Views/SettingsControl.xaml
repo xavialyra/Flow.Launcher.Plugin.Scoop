@@ -8,7 +8,6 @@
              d:DataContext="{d:DesignInstance Type=entity:Settings, IsDesignTimeCreatable=True}"
              d:DesignHeight="50" d:DesignWidth="500"
              MinWidth="400" Margin="10">
-
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -21,11 +20,14 @@
         <TextBlock Grid.Row="0" Grid.Column="0"
                    Text="Scoop Home Path:"
                    VerticalAlignment="Center"
-                   Margin="0,0,30,0"/>
+                   Margin="60,0,10,0"
+                   HorizontalAlignment="Left"/> 
 
         <TextBox Grid.Row="0" Grid.Column="1"
+                 Width="300"
                  Text="{Binding ScoopHome, UpdateSourceTrigger=PropertyChanged}"
                  VerticalAlignment="Center"
-                 ToolTip="The installation directory for Scoop (e.g., C:\Users\YourUser\scoop). Leave empty to attempt auto-detection."/>
+                 ToolTip="The installation directory for Scoop (e.g., C:\Users\YourUser\Scoop). Leave empty to attempt auto-detection."
+                 HorizontalAlignment="Left"/>
     </Grid>
 </UserControl>
