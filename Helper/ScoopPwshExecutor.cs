@@ -8,32 +8,50 @@ namespace Flow.Launcher.Plugin.Scoop.Helper;
 
 public class ScoopPwshExecutor
 {
+    private sealed record CommandResult(string Output, string Error);
+
     public static async Task ExecuteCommandAsync(string command)
     {
-        string shellExecutable = "pwsh.exe";
+        await ExecuteCommandWithOutputAsync(command);
+    }
+
+    public static Task<string> GetStatusJsonAsync()
+    {
+        const string command =
+            "$records = @(scoop status 6>&1); " +
+            "$apps = @($records | Where-Object { $_.PSObject.Properties.Name -contains 'Installed Version' }); " +
+            "[pscustomobject]@{ Apps = $apps } | ConvertTo-Json -Depth 5 -Compress";
+
+        return ExecuteCommandWithOutputAsync(command);
+    }
+
+    public static async Task<string> ExecuteCommandWithOutputAsync(string command)
+    {
+        const string PowerShellCore = "pwsh.exe";
+        const string WindowsPowerShell = "powershell.exe";
+
         try
         {
-            await ExecuteCommandWithShellAsync(shellExecutable, command);
+            return (await ExecuteCommandWithShellAsync(PowerShellCore, command)).Output;
         }
-        catch (Exception ex) when (ex is Win32Exception || ex.Message.Contains("not found") ||
-                                   ex.Message.Contains("not recognized"))
+        catch (Exception ex) when (IsShellUnavailable(ex))
         {
-            shellExecutable = "powershell.exe";
             try
             {
-                await ExecuteCommandWithShellAsync(shellExecutable, command);
+                return (await ExecuteCommandWithShellAsync(WindowsPowerShell, command)).Output;
             }
             catch (Exception innerEx) when (innerEx is Win32Exception)
             {
-                if ((innerEx as Win32Exception)?.NativeErrorCode == 1223)
+                if (innerEx is Win32Exception win32Exception && win32Exception.NativeErrorCode == 1223)
                 {
                     throw new Exception("The operation was cancelled by the user.", innerEx);
                 }
 
-                if (innerEx.Message.Contains("not found") || innerEx.Message.Contains("not recognized"))
+                if (innerEx.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                    || innerEx.Message.Contains("not recognized", StringComparison.OrdinalIgnoreCase))
                 {
                     throw new Exception(
-                        $"{shellExecutable} was also not found.  Both pwsh.exe and powershell.exe failed to start.",
+                        $"{WindowsPowerShell} was also not found. Both pwsh.exe and powershell.exe failed to start.",
                         innerEx);
                 }
 
@@ -42,120 +60,157 @@ public class ScoopPwshExecutor
         }
     }
 
-    private static async Task ExecuteCommandWithShellAsync(string shellExecutable, string command)
+    private static async Task<CommandResult> ExecuteCommandWithShellAsync(string shellExecutable, string command)
     {
         using var process = new Process();
         process.StartInfo.FileName = shellExecutable;
-        process.StartInfo.Arguments = $"-NoProfile -ExecutionPolicy unrestricted -Command \"{command}\"";
+        process.StartInfo.ArgumentList.Add("-NoProfile");
+        process.StartInfo.ArgumentList.Add("-ExecutionPolicy");
+        process.StartInfo.ArgumentList.Add("unrestricted");
+        process.StartInfo.ArgumentList.Add("-Command");
+        process.StartInfo.ArgumentList.Add(command);
         process.StartInfo.CreateNoWindow = true;
         process.StartInfo.UseShellExecute = false;
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
-        process.StartInfo.Verb = "runas";
-
-        string output = null;
-        string error = null;
-
-        process.OutputDataReceived += (sender, e) =>
-        {
-            if (!string.IsNullOrEmpty(e.Data))
-            {
-                output += e.Data + Environment.NewLine;
-            }
-        };
-
-        process.ErrorDataReceived += (sender, e) =>
-        {
-            if (!string.IsNullOrEmpty(e.Data))
-            {
-                error += e.Data + Environment.NewLine;
-            }
-        };
 
         process.Start();
 
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
 
-        await Task.Run(() => process.WaitForExit());
+        var output = await outputTask;
+        var error = await errorTask;
 
         if (process.ExitCode != 0)
         {
             throw new Exception(
-                $"{shellExecutable} script execution failed (Process). Exit code: {process.ExitCode}.  Error Output: {error}");
+                $"{shellExecutable} script execution failed. Exit code: {process.ExitCode}. Error Output: {error.Trim()}");
         }
+
+        return new CommandResult(output, error);
     }
 
-    public static async Task InstallAsync(Match match, PluginInitContext context)
+    public static Task InstallAsync(Match match, PluginInitContext context)
+    {
+        return ExecuteOperationAsync(
+            command: $"scoop install {QuotePowerShellArgument($"{match.Bucket}/{match.Name}")}",
+            title: $"Install {match.Name}",
+            subTitle: $"bucket {match.Bucket} version {match.Version}",
+            successMessage: "Install finished",
+            errorTitle: "Install failed",
+            context);
+    }
+
+    public static Task UninstallAsync(Match match, PluginInitContext context)
+    {
+        return ExecuteOperationAsync(
+            command: $"scoop uninstall {QuotePowerShellArgument($"{match.Bucket}/{match.Name}")}",
+            title: $"Uninstall {match.Name}",
+            subTitle: $"bucket {match.Bucket} version {match.Version}",
+            successMessage: $"Uninstall finished: {match.Name}",
+            errorTitle: "Uninstall failed",
+            context);
+    }
+
+    public static Task UpdateAsync(Match match, PluginInitContext context)
+    {
+        return ExecuteOperationAsync(
+            command: $"scoop update {QuotePowerShellArgument($"{match.Bucket}/{match.Name}")}",
+            title: $"Update {match.Name}",
+            subTitle: $"bucket: {match.Bucket}",
+            successMessage: $"Update finished: {match.Name}",
+            errorTitle: "Update failed",
+            context);
+    }
+
+    public static Task UpdateAsync(string appName, PluginInitContext context)
+    {
+        return ExecuteOperationAsync(
+            command: $"scoop update {QuotePowerShellArgument(appName)}",
+            title: $"Update {appName}",
+            subTitle: "Update the selected Scoop app",
+            successMessage: $"Update finished: {appName}",
+            errorTitle: "Update failed",
+            context);
+    }
+
+    public static Task UpdateScoopAsync(PluginInitContext context)
+    {
+        return ExecuteOperationAsync(
+            command: "scoop update",
+            title: "Update Scoop and buckets",
+            subTitle: "Synchronize Scoop and installed buckets",
+            successMessage: "Scoop update finished",
+            errorTitle: "Scoop update failed",
+            context);
+    }
+
+    public static Task CleanupAsync(string appName, PluginInitContext context)
+    {
+        return ExecuteOperationAsync(
+            command: $"scoop cleanup {QuotePowerShellArgument(appName)}",
+            title: $"Cleanup {appName}",
+            subTitle: "Remove old versions of the selected Scoop app",
+            successMessage: $"Cleanup finished: {appName}",
+            errorTitle: "Cleanup failed",
+            context);
+    }
+
+    public static Task CleanupAllAsync(PluginInitContext context)
+    {
+        return ExecuteOperationAsync(
+            command: "scoop cleanup --all",
+            title: "Cleanup all installed apps",
+            subTitle: "Remove old versions from every Scoop app",
+            successMessage: "App cleanup finished",
+            errorTitle: "Cleanup failed",
+            context);
+    }
+
+    public static Task ResetAsync(Match match, PluginInitContext context)
+    {
+        return ExecuteOperationAsync(
+            command: $"scoop reset {QuotePowerShellArgument($"{match.Bucket}/{match.Name}")}",
+            title: $"Reset {match.Name}",
+            subTitle: $"bucket: {match.Bucket} version {match.Version}",
+            successMessage: $"Reset finished: {match.Name}",
+            errorTitle: "Reset failed",
+            context);
+    }
+
+    private static async Task ExecuteOperationAsync(
+        string command,
+        string title,
+        string subTitle,
+        string successMessage,
+        string errorTitle,
+        PluginInitContext context)
     {
         try
         {
-            context.API.ShowMsg(
-                title: $"Install {match.Name}",
-                subTitle: $"bucket {match.Bucket} version {match.Version}"
-            );
-            await ExecuteCommandAsync($"scoop install {match.Bucket}/{match.Name}");
-            // context.API.HideMainWindow();
-            context.API.ShowMsg("Install finished");
+            context.API.ShowMsg(title, subTitle);
+            await ExecuteCommandAsync(command);
+            ScoopStatusHelper.InvalidateCache();
+            context.API.ShowMsg(successMessage);
         }
         catch (Exception e)
         {
-            context.API.ShowMsgError("Install failed", e.Message);
+            context.API.ShowMsgError(errorTitle, e.Message);
             throw;
         }
     }
 
-    public static async Task UninstallAsync(Match match, PluginInitContext context)
+    private static string QuotePowerShellArgument(string argument)
     {
-        try
-        {
-            context.API.ShowMsg(
-                title: $"uninstall {match.Name}",
-                subTitle: $"bucket {match.Bucket} version {match.Version}"
-            );
-            await ExecuteCommandAsync($"scoop uninstall {match.Bucket}/{match.Name}");
-            context.API.ShowMsg($"Uninstall finished: {match.Name}");
-        }
-        catch (Exception e)
-        {
-            context.API.ShowMsgError("Uninstall failed", e.Message);
-            throw;
-        }
+        return $"'{argument.Replace("'", "''")}'";
     }
 
-    public static async Task UpdateAsync(Match match, PluginInitContext context)
+    private static bool IsShellUnavailable(Exception exception)
     {
-        try
-        {
-            context.API.ShowMsg(
-                title: $"update {match.Name}",
-                subTitle: $"bucket: {match.Bucket}"
-            );
-            await ExecuteCommandAsync($"scoop update {match.Bucket}/{match.Name}");
-            context.API.ShowMsg($"Update finished: {match.Name}");
-        }
-        catch (Exception e)
-        {
-            context.API.ShowMsgError("Update failed", e.Message);
-            throw;
-        }
-    }
-
-    public static async Task ResetAsync(Match match, PluginInitContext context)
-    {
-        try
-        {
-            context.API.ShowMsg(
-                title: $"reset {match.Name}",
-                subTitle: $"bucket: {match.Bucket} version {match.Version}"
-            );
-            await ExecuteCommandAsync($"scoop reset {match.Bucket}/{match.Name}");
-            context.API.ShowMsg($"Reset finished: {match.Name}");
-        }
-        catch (Exception e)
-        {
-            context.API.ShowMsgError("Reset failed", e.Message);
-            throw;
-        }
+        return exception is Win32Exception
+               || exception.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)
+               || exception.Message.Contains("not recognized", StringComparison.OrdinalIgnoreCase);
     }
 }

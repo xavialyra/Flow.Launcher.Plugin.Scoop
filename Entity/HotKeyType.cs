@@ -6,5 +6,7 @@ namespace Flow.Launcher.Plugin.Scoop.Entity;
 public enum HotKeyType
 {
     List,
-    Search
+    Search,
+    Update,
+    Cleanup
 }

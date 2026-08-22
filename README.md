@@ -34,4 +34,13 @@ This plugin provides the following functionality:
         *   **Open Homepage:** Opens the application's homepage in your browser.
         *   **Install:** Installs the application using Scoop.
 
+*   **`scoop update` (Available Updates):**
+    *   Checks installed applications for available updates and lists them.
+    *   Selecting an application runs `scoop update <app>`.
+    *   **Update Scoop and buckets:** Runs `scoop update`.
+
+*   **`scoop cleanup` (Maintenance):**
+    *   Removes old versions from all installed applications with `scoop cleanup --all` or `scoop cleanup *`.
+    *   Cleanup is destructive and does not remove the download cache unless explicitly requested outside this plugin.
+
 ![PixPin_2025-03-23_18-24-14](https://github.com/user-attachments/assets/d3583a01-03a3-4a38-afe4-3d55ba142cf0)

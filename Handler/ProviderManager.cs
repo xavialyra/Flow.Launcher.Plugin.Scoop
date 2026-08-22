@@ -19,6 +19,8 @@ public class ProviderManager
         {
             { HotKeyType.List, ("List installed apps", context => new ListProvider(context)) },
             { HotKeyType.Search, ("Search apps from added bucket", context => new SearchProvider(context)) },
+            { HotKeyType.Update, ("Show and update available apps", context => new MaintenanceProvider(context, HotKeyType.Update)) },
+            { HotKeyType.Cleanup, ("Remove old app versions", context => new MaintenanceProvider(context, HotKeyType.Cleanup)) },
         };
 
     public ProviderBase? GetProvider(string operationTypeStr)

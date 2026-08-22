@@ -16,7 +16,10 @@ public class ContextMenu : IContextMenu
 
     public List<Result> LoadContextMenus(Result selectedResult)
     {
-        var resultContext = (ContextData)selectedResult.ContextData;
+        if (selectedResult.ContextData is not ContextData resultContext)
+        {
+            return new List<Result>();
+        }
 
         return resultContext.HotKeyType switch
         {
