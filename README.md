@@ -34,12 +34,11 @@ This plugin provides the following functionality:
         *   **Open Homepage:** Opens the application's homepage in your browser.
         *   **Install:** Installs the application using Scoop.
 
-> **First search notice:** After installing the plugin or deleting its cache, the first `scoop search` may take several seconds because all Scoop manifests must be enumerated and parsed. The completed index is persisted in Flow Launcher's plugin cache and reused on later searches and restarts; only changed manifests are reparsed.
-
 *   **`scoop update` (Available Updates):**
     *   Checks installed applications for available updates and lists them.
     *   Selecting an application runs `scoop update <app>`.
     *   **Update Scoop and buckets:** Runs `scoop update`.
+    *   **Update all applications:** Runs `scoop update --all`.
 
 *   **`scoop cleanup` (Maintenance):**
     *   Removes old versions from all installed applications with `scoop cleanup --all` or `scoop cleanup *`.

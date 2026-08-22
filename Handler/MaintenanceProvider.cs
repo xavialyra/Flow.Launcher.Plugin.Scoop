@@ -35,8 +35,12 @@ public class MaintenanceProvider : ProviderBase
         string target,
         CancellationToken cancellationToken)
     {
-        var showAllUpdates = IsAllTarget(target);
-        var filter = showAllUpdates ? string.Empty : target;
+        if (IsAllTarget(target))
+        {
+            return new List<Result>();
+        }
+
+        var filter = target;
         var report = await ScoopStatusHelper.GetResultAsync(
             ScoopInstance.ScoopHomePath!,
             cancellationToken);
@@ -47,13 +51,18 @@ public class MaintenanceProvider : ProviderBase
             .ToList();
 
         var results = new List<Result>();
-        if (!showAllUpdates && string.IsNullOrWhiteSpace(target))
+        if (string.IsNullOrWhiteSpace(target))
         {
             results.Add(CreateCommandResult(
                 title: "Update Scoop and buckets",
                 subTitle: "scoop update",
                 icon: () => ScoopInstance.UpdateIcon,
                 execute: ScoopPwshExecutor.UpdateScoopAsync));
+            results.Add(CreateCommandResult(
+                title: "Update all applications",
+                subTitle: "scoop update --all",
+                icon: () => ScoopInstance.UpdateIcon,
+                execute: ScoopPwshExecutor.UpdateAllAsync));
         }
 
         results.AddRange(updates.Select(item => CreateUpdateResult(item, filter)));
@@ -65,14 +74,6 @@ public class MaintenanceProvider : ProviderBase
             }
 
             return results;
-        }
-
-        if (showAllUpdates)
-        {
-            return new List<Result>
-            {
-                CreateMessageResult("No application updates available")
-            };
         }
 
         if (!string.IsNullOrWhiteSpace(target))

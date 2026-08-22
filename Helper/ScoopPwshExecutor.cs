@@ -172,6 +172,17 @@ public class ScoopPwshExecutor
             context);
     }
 
+    public static Task UpdateAllAsync(PluginInitContext context)
+    {
+        return ExecuteOperationAsync(
+            command: "scoop update --all",
+            title: "Update all applications",
+            subTitle: "Update every installed Scoop application",
+            successMessage: "All application updates finished",
+            errorTitle: "Update all applications failed",
+            context);
+    }
+
     public static Task CleanupAsync(string appName, PluginInitContext context)
     {
         return ExecuteOperationAsync(
