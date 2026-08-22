@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Windows.Controls;
 using Flow.Launcher.Plugin.Scoop.Entity;
 using Flow.Launcher.Plugin.Scoop.Handler;
+using Flow.Launcher.Plugin.Scoop.Helper;
 using Flow.Launcher.Plugin.Scoop.Views;
 using ContextMenu = Flow.Launcher.Plugin.Scoop.Entity.ContextMenu;
 
@@ -20,6 +21,7 @@ public class Scoop : IAsyncPlugin, IContextMenu, ISettingProvider
     public Task InitAsync(PluginInitContext context)
     {
         _context = context;
+        SearchHelper.Initialize(context);
         _providerManager = new ProviderManager(context);
         _contextMenu = new ContextMenu(context);
         _settings = _context.API.LoadSettingJsonStorage<Settings>();

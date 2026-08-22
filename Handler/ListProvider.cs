@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Flow.Launcher.Plugin.Scoop.Entity;
 using Flow.Launcher.Plugin.Scoop.Helper;
@@ -13,9 +14,14 @@ public class ListProvider : ProviderBase
     {
     }
 
-    protected override async Task<List<Result>> GetResultAsync(string keyword)
+    protected override async Task<List<Result>> GetResultAsync(string keyword, CancellationToken cancellationToken)
     {
-        var matches = await Task.Run(() => ListHelper.GetResult(ScoopInstance.ScoopHomePath!, keyword));
+        var matches = await Task.Run(
+            () => ListHelper.GetResult(
+                ScoopInstance.ScoopHomePath!,
+                keyword,
+                cancellationToken: cancellationToken),
+            cancellationToken);
 
         return matches
             .Select(item => new Result

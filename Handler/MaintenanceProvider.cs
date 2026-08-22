@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using Flow.Launcher.Plugin.Scoop.Entity;
@@ -17,22 +18,28 @@ public class MaintenanceProvider : ProviderBase
         _operation = operation;
     }
 
-    protected override async Task<List<Result>> GetResultAsync(string keyword)
+    protected override async Task<List<Result>> GetResultAsync(
+        string keyword,
+        CancellationToken cancellationToken)
     {
         var target = keyword.Trim();
         return _operation switch
         {
-            HotKeyType.Update => await GetUpdateResultsAsync(target),
+            HotKeyType.Update => await GetUpdateResultsAsync(target, cancellationToken),
             HotKeyType.Cleanup => GetCleanupResults(target),
             _ => new List<Result>()
         };
     }
 
-    private async Task<List<Result>> GetUpdateResultsAsync(string target)
+    private async Task<List<Result>> GetUpdateResultsAsync(
+        string target,
+        CancellationToken cancellationToken)
     {
         var showAllUpdates = IsAllTarget(target);
         var filter = showAllUpdates ? string.Empty : target;
-        var report = await ScoopStatusHelper.GetResultAsync(ScoopInstance.ScoopHomePath!);
+        var report = await ScoopStatusHelper.GetResultAsync(
+            ScoopInstance.ScoopHomePath!,
+            cancellationToken);
         var updates = report.Apps
             .Where(HasAvailableUpdate)
             .Where(item => string.IsNullOrWhiteSpace(filter)

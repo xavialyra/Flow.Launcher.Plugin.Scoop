@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Flow.Launcher.Plugin.Scoop.Entity;
 using Flow.Launcher.Plugin.Scoop.Helper;
@@ -12,7 +13,7 @@ public class SearchProvider : ProviderBase
     {
     }
 
-    protected override async Task<List<Result>> GetResultAsync(string keyword)
+    protected override async Task<List<Result>> GetResultAsync(string keyword, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(keyword))
         {
@@ -33,11 +34,11 @@ public class SearchProvider : ProviderBase
         var matches = await SearchHelper.GetResultAsync(
             bucketBase: ScoopInstance.ScoopHomePath!,
             keyword: searchKeyWord,
-            bucketName: bucketName
+            bucketName: bucketName,
+            cancellationToken: cancellationToken
         );
 
         return matches
-            .Take(50)
             .Select(item => new Result
             {
                 Title = item.Name,
@@ -57,6 +58,9 @@ public class SearchProvider : ProviderBase
                 },
                 ContextData = ContextData.OfSearch(item)
             })
+            .OrderByDescending(result => result.Score)
+            .ThenBy(result => result.Title, System.StringComparer.OrdinalIgnoreCase)
+            .Take(50)
             .ToList();
     }
 }

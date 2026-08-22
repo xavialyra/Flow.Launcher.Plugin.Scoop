@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using Flow.Launcher.Plugin.Scoop.Entity;
 
@@ -15,30 +16,32 @@ public class ScoopPwshExecutor
         await ExecuteCommandWithOutputAsync(command);
     }
 
-    public static Task<string> GetStatusJsonAsync()
+    public static Task<string> GetStatusJsonAsync(CancellationToken cancellationToken = default)
     {
         const string command =
             "$records = @(scoop status 6>&1); " +
             "$apps = @($records | Where-Object { $_.PSObject.Properties.Name -contains 'Installed Version' }); " +
             "[pscustomobject]@{ Apps = $apps } | ConvertTo-Json -Depth 5 -Compress";
 
-        return ExecuteCommandWithOutputAsync(command);
+        return ExecuteCommandWithOutputAsync(command, cancellationToken);
     }
 
-    public static async Task<string> ExecuteCommandWithOutputAsync(string command)
+    public static async Task<string> ExecuteCommandWithOutputAsync(
+        string command,
+        CancellationToken cancellationToken = default)
     {
         const string PowerShellCore = "pwsh.exe";
         const string WindowsPowerShell = "powershell.exe";
 
         try
         {
-            return (await ExecuteCommandWithShellAsync(PowerShellCore, command)).Output;
+            return (await ExecuteCommandWithShellAsync(PowerShellCore, command, cancellationToken)).Output;
         }
         catch (Exception ex) when (IsShellUnavailable(ex))
         {
             try
             {
-                return (await ExecuteCommandWithShellAsync(WindowsPowerShell, command)).Output;
+                return (await ExecuteCommandWithShellAsync(WindowsPowerShell, command, cancellationToken)).Output;
             }
             catch (Exception innerEx) when (innerEx is Win32Exception)
             {
@@ -60,7 +63,10 @@ public class ScoopPwshExecutor
         }
     }
 
-    private static async Task<CommandResult> ExecuteCommandWithShellAsync(string shellExecutable, string command)
+    private static async Task<CommandResult> ExecuteCommandWithShellAsync(
+        string shellExecutable,
+        string command,
+        CancellationToken cancellationToken)
     {
         using var process = new Process();
         process.StartInfo.FileName = shellExecutable;
@@ -78,7 +84,26 @@ public class ScoopPwshExecutor
 
         var outputTask = process.StandardOutput.ReadToEndAsync();
         var errorTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+            }
+            catch (Exception)
+            {
+                // The process may have exited while cancellation was being handled.
+            }
+
+            throw;
+        }
 
         var output = await outputTask;
         var error = await errorTask;
@@ -193,6 +218,7 @@ public class ScoopPwshExecutor
             context.API.ShowMsg(title, subTitle);
             await ExecuteCommandAsync(command);
             ScoopStatusHelper.InvalidateCache();
+            SearchHelper.InvalidateCache();
             context.API.ShowMsg(successMessage);
         }
         catch (Exception e)

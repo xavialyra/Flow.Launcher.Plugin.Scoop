@@ -17,7 +17,9 @@ public static class ScoopStatusHelper
     private static DateTime _cacheTimeUtc;
     private static string? _cacheScoopHome;
 
-    public static async Task<ScoopStatusReport> GetResultAsync(string scoopHome)
+    public static async Task<ScoopStatusReport> GetResultAsync(
+        string scoopHome,
+        CancellationToken cancellationToken = default)
     {
         lock (CacheLock)
         {
@@ -27,7 +29,7 @@ public static class ScoopStatusHelper
             }
         }
 
-        await RefreshLock.WaitAsync();
+        await RefreshLock.WaitAsync(cancellationToken);
         try
         {
             lock (CacheLock)
@@ -38,7 +40,7 @@ public static class ScoopStatusHelper
                 }
             }
 
-            var statusJson = await ScoopPwshExecutor.GetStatusJsonAsync();
+            var statusJson = await ScoopPwshExecutor.GetStatusJsonAsync(cancellationToken);
             var result = Parse(statusJson);
 
             lock (CacheLock)

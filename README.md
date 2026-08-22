@@ -26,13 +26,15 @@ This plugin provides the following functionality:
 
 
 *   **`scoop search` (Search Apps):**
-    *   **Action:** Searches for applications within your installed Scoop buckets.
+    *   **Action:** Searches installed bucket manifests by app name, binaries, aliases, and shortcuts.
     *   **Click:** Opens the application's homepage in your browser.
     *   **`Ctrl + Enter`:** Opens the application's configuration file (if available) in File Explorer.
     *   **Context Menu:**
         *   **Intro:** Displays a brief description of the application.
         *   **Open Homepage:** Opens the application's homepage in your browser.
         *   **Install:** Installs the application using Scoop.
+
+> **First search notice:** After installing the plugin or deleting its cache, the first `scoop search` may take several seconds because all Scoop manifests must be enumerated and parsed. The completed index is persisted in Flow Launcher's plugin cache and reused on later searches and restarts; only changed manifests are reparsed.
 
 *   **`scoop update` (Available Updates):**
     *   Checks installed applications for available updates and lists them.

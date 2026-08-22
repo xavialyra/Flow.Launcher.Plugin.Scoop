@@ -1,15 +1,21 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
 using Flow.Launcher.Plugin.Scoop.Entity;
 
 namespace Flow.Launcher.Plugin.Scoop.Helper;
 
 public class ListHelper
 {
-    public static List<Match> GetResult(string bucketBase, string keyword, string? bucketName = null,
-        int limit = -1)
+    public static List<Match> GetResult(
+        string bucketBase,
+        string keyword,
+        string? bucketName = null,
+        int limit = -1,
+        CancellationToken cancellationToken = default)
     {
         var appsPath = Path.Combine(bucketBase, "apps");
 
@@ -22,6 +28,8 @@ public class ListHelper
 
         foreach (var appDir in Directory.GetDirectories(appsPath))
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var appCurrPath = Path.Combine(appDir, "current");
             var manifestPath = Path.Combine(appCurrPath, "manifest.json");
             var installConfigPath = Path.Combine(appCurrPath, "install.json");
@@ -88,6 +96,10 @@ public class ListHelper
                 {
                     break;
                 }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch
             {

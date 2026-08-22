@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -40,22 +41,27 @@ public abstract class ProviderBase
         }
     };
 
-    protected abstract Task<List<Result>> GetResultAsync(string keyword);
+    protected abstract Task<List<Result>> GetResultAsync(string keyword, CancellationToken cancellationToken);
 
-    public Task<List<Result>> Handle(string keyword, CancellationToken token)
+    public async Task<List<Result>> Handle(string keyword, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(ScoopInstance.ScoopHomePath))
         {
-            return Task.FromResult(ScoopDetectionFailedResult);
+            return ScoopDetectionFailedResult;
         }
 
-        return GetResultAsync(keyword)
-            .ContinueWith(task =>
-            {
-                if (!task.IsFaulted) return task.Result;
-                _context.API.LogException("Provider",
-                    $"error", task.Exception);
-                return ErrorResult;
-            }, token);
+        try
+        {
+            return await GetResultAsync(keyword, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return new List<Result>();
+        }
+        catch (Exception exception)
+        {
+            _context.API.LogException("Provider", "error", exception);
+            return ErrorResult;
+        }
     }
 }
