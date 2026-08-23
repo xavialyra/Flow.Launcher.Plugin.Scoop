@@ -6,8 +6,8 @@
              mc:Ignorable="d"
              xmlns:entity="clr-namespace:Flow.Launcher.Plugin.Scoop.Entity"
              d:DataContext="{d:DesignInstance Type=entity:Settings, IsDesignTimeCreatable=True}"
-             d:DesignHeight="50" d:DesignWidth="500"
-             MinWidth="400" Margin="10">
+             d:DesignHeight="90" d:DesignWidth="550"
+             MinWidth="500" Margin="10">
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -15,19 +15,34 @@
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Grid.Column="0"
-                   Text="Scoop Home Path:"
+                   Text="Scoop Home (user root):"
                    VerticalAlignment="Center"
-                   Margin="60,0,10,0"
-                   HorizontalAlignment="Left"/> 
+                   Margin="20,0,10,6"
+                   HorizontalAlignment="Left"/>
 
         <TextBox Grid.Row="0" Grid.Column="1"
                  Width="300"
                  Text="{Binding ScoopHome, UpdateSourceTrigger=PropertyChanged}"
                  VerticalAlignment="Center"
-                 ToolTip="The installation directory for Scoop (e.g., C:\Users\YourUser\Scoop). Leave empty to attempt auto-detection."
+                 Margin="0,0,0,6"
+                 ToolTip="The user Scoop root (for example, C:\Users\YourUser\scoop). Applications are stored under its apps subdirectory. Leave empty to use automatic detection."
+                 HorizontalAlignment="Left"/>
+
+        <TextBlock Grid.Row="1" Grid.Column="0"
+                   Text="Scoop Home (global root):"
+                   VerticalAlignment="Center"
+                   Margin="20,0,10,0"
+                   HorizontalAlignment="Left"/>
+
+        <TextBox Grid.Row="1" Grid.Column="1"
+                 Width="300"
+                 Text="{Binding ScoopGlobalHome, UpdateSourceTrigger=PropertyChanged}"
+                 VerticalAlignment="Center"
+                 ToolTip="The global Scoop root (for example, C:\ProgramData\scoop). Applications are stored under C:\ProgramData\scoop\apps. Leave empty to use automatic detection."
                  HorizontalAlignment="Left"/>
     </Grid>
 </UserControl>

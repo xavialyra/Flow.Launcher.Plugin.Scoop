@@ -32,7 +32,7 @@ public class SearchProvider : ProviderBase
         var bucketName = parts.Length > 1 ? parts[0] : null;
 
         var matches = await SearchHelper.GetResultAsync(
-            bucketBase: ScoopInstance.ScoopHomePath!,
+            bucketBase: ScoopInstance.GetPrimaryRootPath(),
             keyword: searchKeyWord,
             bucketName: bucketName,
             cancellationToken: cancellationToken

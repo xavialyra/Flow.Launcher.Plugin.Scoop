@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Threading;
@@ -13,7 +14,7 @@ public class ScoopPwshExecutor
 
     public static async Task ExecuteCommandAsync(string command)
     {
-        await ExecuteCommandWithOutputAsync(command);
+        await ExecuteCommandWithOutputAsync(WithScoopEnvironment(command));
     }
 
     public static Task<string> GetStatusJsonAsync(CancellationToken cancellationToken = default)
@@ -23,7 +24,9 @@ public class ScoopPwshExecutor
             "$apps = @($records | Where-Object { $_.PSObject.Properties.Name -contains 'Installed Version' }); " +
             "[pscustomobject]@{ Apps = $apps } | ConvertTo-Json -Depth 5 -Compress";
 
-        return ExecuteCommandWithOutputAsync(command, cancellationToken);
+        return ExecuteCommandWithOutputAsync(
+            WithScoopEnvironment(command),
+            cancellationToken);
     }
 
     public static async Task<string> ExecuteCommandWithOutputAsync(
@@ -123,42 +126,67 @@ public class ScoopPwshExecutor
             command: $"scoop install {QuotePowerShellArgument($"{match.Bucket}/{match.Name}")}",
             title: $"Install {match.Name}",
             subTitle: $"bucket {match.Bucket} version {match.Version}",
-            successMessage: "Install finished",
+            successMessage: $"Install finished: {match.Name}",
             errorTitle: "Install failed",
             context);
+    }
+
+    public static Task InstallGlobalAsync(Match match, PluginInitContext context)
+    {
+        return ExecuteOperationAsync(
+            command: $"scoop install {QuotePowerShellArgument($"{match.Bucket}/{match.Name}")} --global",
+            title: $"Install {match.Name} (global)",
+            subTitle: BuildOperationSubtitle(
+                ScoopInstallScope.Global,
+                $"bucket {match.Bucket} version {match.Version}"),
+            successMessage: $"Install finished: {match.Name}",
+            errorTitle: "Install failed",
+            context,
+            requiresAdministrator: true);
     }
 
     public static Task UninstallAsync(Match match, PluginInitContext context)
     {
         return ExecuteOperationAsync(
-            command: $"scoop uninstall {QuotePowerShellArgument($"{match.Bucket}/{match.Name}")}",
+            command: $"scoop uninstall {QuotePowerShellArgument($"{match.Bucket}/{match.Name}")}{match.InstallScope.PowerShellArgument()}",
             title: $"Uninstall {match.Name}",
-            subTitle: $"bucket {match.Bucket} version {match.Version}",
+            subTitle: BuildOperationSubtitle(match, $"bucket {match.Bucket} version {match.Version}"),
             successMessage: $"Uninstall finished: {match.Name}",
             errorTitle: "Uninstall failed",
-            context);
+            context,
+            requiresAdministrator: match.InstallScope == ScoopInstallScope.Global);
     }
 
     public static Task UpdateAsync(Match match, PluginInitContext context)
     {
         return ExecuteOperationAsync(
-            command: $"scoop update {QuotePowerShellArgument($"{match.Bucket}/{match.Name}")}",
+            command: $"scoop update {QuotePowerShellArgument($"{match.Bucket}/{match.Name}")}{match.InstallScope.PowerShellArgument()}",
             title: $"Update {match.Name}",
-            subTitle: $"bucket: {match.Bucket}",
+            subTitle: BuildOperationSubtitle(match, $"bucket: {match.Bucket}"),
             successMessage: $"Update finished: {match.Name}",
             errorTitle: "Update failed",
-            context);
+            context,
+            requiresAdministrator: match.InstallScope == ScoopInstallScope.Global);
     }
 
     public static Task UpdateAsync(string appName, PluginInitContext context)
     {
+        return UpdateAsync(appName, ScoopInstallScope.User, context);
+    }
+
+    public static Task UpdateAsync(
+        string appName,
+        ScoopInstallScope installScope,
+        PluginInitContext context)
+    {
         return ExecuteOperationAsync(
-            command: $"scoop update {QuotePowerShellArgument(appName)}",
+            command: $"scoop update {QuotePowerShellArgument(appName)}{installScope.PowerShellArgument()}",
             title: $"Update {appName}",
-            subTitle: "Update the selected Scoop app",
+            subTitle: BuildOperationSubtitle(installScope, "Update the selected Scoop app"),
             successMessage: $"Update finished: {appName}",
             errorTitle: "Update failed",
-            context);
+            context,
+            requiresAdministrator: installScope == ScoopInstallScope.Global);
     }
 
     public static Task UpdateScoopAsync(PluginInitContext context)
@@ -176,33 +204,40 @@ public class ScoopPwshExecutor
     {
         return ExecuteOperationAsync(
             command: "scoop update --all",
-            title: "Update all applications",
-            subTitle: "Update every installed Scoop application",
-            successMessage: "All application updates finished",
-            errorTitle: "Update all applications failed",
+            title: "Update all user applications",
+            subTitle: "Update every user-installed Scoop application",
+            successMessage: "All user application updates finished",
+            errorTitle: "Update all user applications failed",
             context);
     }
 
-    public static Task CleanupAsync(string appName, PluginInitContext context)
+    public static Task UpdateAllGlobalAsync(PluginInitContext context)
     {
-        return ExecuteOperationAsync(
-            command: $"scoop cleanup {QuotePowerShellArgument(appName)}",
-            title: $"Cleanup {appName}",
-            subTitle: "Remove old versions of the selected Scoop app",
-            successMessage: $"Cleanup finished: {appName}",
-            errorTitle: "Cleanup failed",
-            context);
-    }
+        if (!ScoopInstance.IsAdministrator())
+        {
+            context.API.ShowMsgError(
+                "Global update unavailable",
+                "Administrator privileges are required to update global Scoop applications.");
+            return Task.CompletedTask;
+        }
 
-    public static Task CleanupAllAsync(PluginInitContext context)
-    {
+        var globalAppsPath = ScoopInstance.GetAppsPath(ScoopInstallScope.Global);
+        var globalAppsPathArgument = QuotePowerShellArgument(globalAppsPath);
+        var command =
+            $"if (-not (Test-Path -LiteralPath {globalAppsPathArgument})) {{ " +
+            "throw 'Global Scoop apps directory not found.' }; " +
+            $"Get-ChildItem -LiteralPath {globalAppsPathArgument} -Directory " +
+            "| Where-Object { $_.Name -ne 'scoop' } " +
+            "| ForEach-Object { scoop update $_.Name --global }";
+
         return ExecuteOperationAsync(
-            command: "scoop cleanup --all",
-            title: "Cleanup all installed apps",
-            subTitle: "Remove old versions from every Scoop app",
-            successMessage: "App cleanup finished",
-            errorTitle: "Cleanup failed",
-            context);
+            command,
+            title: "Update all global applications",
+            subTitle: "Update every globally installed Scoop application",
+            successMessage: "All global application updates finished",
+            errorTitle: "Update all global applications failed",
+            context,
+            requiresAdministrator: true);
     }
 
     public static Task ResetAsync(Match match, PluginInitContext context)
@@ -210,7 +245,7 @@ public class ScoopPwshExecutor
         return ExecuteOperationAsync(
             command: $"scoop reset {QuotePowerShellArgument($"{match.Bucket}/{match.Name}")}",
             title: $"Reset {match.Name}",
-            subTitle: $"bucket: {match.Bucket} version {match.Version}",
+            subTitle: BuildOperationSubtitle(match, $"bucket: {match.Bucket} version {match.Version}"),
             successMessage: $"Reset finished: {match.Name}",
             errorTitle: "Reset failed",
             context);
@@ -222,10 +257,17 @@ public class ScoopPwshExecutor
         string subTitle,
         string successMessage,
         string errorTitle,
-        PluginInitContext context)
+        PluginInitContext context,
+        bool requiresAdministrator = false)
     {
         try
         {
+            if (requiresAdministrator && !ScoopInstance.IsAdministrator())
+            {
+                throw new InvalidOperationException(
+                    "Administrator privileges are required for this global Scoop operation.");
+            }
+
             context.API.ShowMsg(title, subTitle);
             await ExecuteCommandAsync(command);
             ScoopStatusHelper.InvalidateCache();
@@ -237,6 +279,34 @@ public class ScoopPwshExecutor
             context.API.ShowMsgError(errorTitle, e.Message);
             throw;
         }
+    }
+
+    private static string BuildOperationSubtitle(Match match, string subtitle)
+    {
+        return BuildOperationSubtitle(match.InstallScope, subtitle);
+    }
+
+    private static string BuildOperationSubtitle(ScoopInstallScope installScope, string subtitle)
+    {
+        var scopeLabel = installScope.DisplayLabel();
+        return string.IsNullOrEmpty(scopeLabel) ? subtitle : $"{scopeLabel}, {subtitle}";
+    }
+
+    private static string WithScoopEnvironment(string command)
+    {
+        var assignments = new List<string>();
+        foreach (var installation in ScoopInstance.GetInstallations())
+        {
+            var variable = installation.Scope == ScoopInstallScope.Global
+                ? "SCOOP_GLOBAL"
+                : "SCOOP";
+            assignments.Add(
+                $"$env:{variable} = {QuotePowerShellArgument(installation.RootPath)}");
+        }
+
+        return assignments.Count == 0
+            ? command
+            : $"{string.Join("; ", assignments)}; {command}";
     }
 
     private static string QuotePowerShellArgument(string argument)

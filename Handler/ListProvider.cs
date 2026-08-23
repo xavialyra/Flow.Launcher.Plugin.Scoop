@@ -18,16 +18,15 @@ public class ListProvider : ProviderBase
     {
         var matches = await Task.Run(
             () => ListHelper.GetResult(
-                ScoopInstance.ScoopHomePath!,
+                ScoopInstance.GetInstallations(),
                 keyword,
                 cancellationToken: cancellationToken),
             cancellationToken);
-
         return matches
             .Select(item => new Result
             {
-                Title = item.Name,
-                SubTitle = item.Description,
+                Title = BuildTitle(item),
+                SubTitle = item.Description ?? string.Empty,
                 Icon = () => item.Icon ?? ScoopInstance.ScoopIcon,
                 Score = _context.API.FuzzySearch(keyword, item.Name).Score,
                 Action = action =>
@@ -45,5 +44,13 @@ public class ListProvider : ProviderBase
                 ContextData = ContextData.OfList(item)
             })
             .ToList();
+    }
+
+    private static string BuildTitle(Match match)
+    {
+        var scope = match.InstallScope.DisplayLabel();
+        return string.IsNullOrEmpty(scope)
+            ? match.Name
+            : $"{match.Name} ({scope})";
     }
 }

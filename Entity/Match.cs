@@ -14,4 +14,6 @@ public class Match
     public string? Homepage { get; set; }
     public ImageSource? Icon { get; set; }
     public string? Description { get; set; }
+    public ScoopInstallScope InstallScope { get; set; } = ScoopInstallScope.User;
+    public string? InstallationRootPath { get; set; }
 }

@@ -1,10 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading;
 using System.Windows.Media;
 using Flow.Launcher.Plugin.Scoop.Entity;
 using Flow.Launcher.Plugin.Scoop.Helper;
@@ -12,6 +16,7 @@ using Flow.Launcher.Plugin.Scoop.Helper;
 public static class ScoopInstance
 {
     public static string? ScoopHomePath { get; private set; } = string.Empty;
+    public static string? ScoopGlobalHomePath { get; private set; } = string.Empty;
     public static string? ScoopConfigFilePath { get; private set; } = string.Empty;
     public static ImageSource ScoopIcon { get; private set; }
     public static ImageSource HomeIcon { get; private set; }
@@ -65,95 +70,144 @@ public static class ScoopInstance
     /// <summary>
     /// Returns the path to the root of scoop. Logic follows Scoop's logic for resolving the home directory.
     /// </summary>
-    private static string? GetScoopHome(Settings settings)
+    private static string? GetScoopHome(Settings settings, string? globalPath)
     {
-        if (!string.IsNullOrWhiteSpace(settings.ScoopHome))
+        var configuredPath = GetValidScoopDirectory(settings.ScoopHome);
+        if (configuredPath != null
+            && (globalPath == null || !PathsEqual(configuredPath, globalPath)))
         {
-            return settings.ScoopHome;
+            return configuredPath;
         }
 
-        string? scoopPath = null;
-        string? potentialPath = null;
-
-        scoopPath = Environment.GetEnvironmentVariable("SCOOP_GLOBAL");
-        if (IsValidScoopDirectory(scoopPath)) return scoopPath;
-        
-        scoopPath = Environment.GetEnvironmentVariable("SCOOP");
-        if (IsValidScoopDirectory(scoopPath)) return scoopPath;
-
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        var scoopPath = GetValidScoopDirectory(Environment.GetEnvironmentVariable("SCOOP"));
+        if (scoopPath != null
+            && (globalPath == null || !PathsEqual(scoopPath, globalPath)))
         {
-            potentialPath = RunCommand("where", "scoop");
-            if (!string.IsNullOrWhiteSpace(potentialPath))
-            {
-                var firstPath = potentialPath.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-                if (!string.IsNullOrWhiteSpace(firstPath))
-                {
-                    var dir = Path.GetDirectoryName(firstPath);
-                    if (dir != null)
-                    {
-                        scoopPath = Path.GetFileName(dir).Equals("shims", StringComparison.OrdinalIgnoreCase) ? Path.GetDirectoryName(dir) : dir;
-        
-                        if (IsValidScoopDirectory(scoopPath)) return scoopPath;
-                    }
-                }
-            }
+            return scoopPath;
         }
 
         var homeDir = GetHomeDir();
-        if (homeDir != null)
+        var parsedConfig = LoadScoopConfig(homeDir);
+        var configPath = GetValidScoopDirectory(parsedConfig?.RootPath);
+        if (configPath != null
+            && (globalPath == null || !PathsEqual(configPath, globalPath)))
         {
-            var scoopConfigPath = GetScoopConfigFilePath(homeDir);
-            if (File.Exists(scoopConfigPath))
+            return configPath;
+        }
+
+        foreach (var commandRoot in GetScoopCommandRoots())
+        {
+            if (globalPath == null || !PathsEqual(commandRoot, globalPath))
             {
-                try
-                {
-                    var configContent = File.ReadAllText(scoopConfigPath);
-                    var parsed = JsonSerializer.Deserialize<ScoopConfig>(configContent, new JsonSerializerOptions
-                    {
-                        ReadCommentHandling = JsonCommentHandling.Skip,
-                        PropertyNameCaseInsensitive = true
-                    });
-                    if (IsValidScoopDirectory(parsed?.RootPath))
-                    {
-                        return parsed.RootPath;
-                    }
-                    potentialPath = Path.GetDirectoryName(scoopConfigPath);
-                    if (IsValidScoopDirectory(potentialPath))
-                    {
-                         return potentialPath;
-                    }
-                }
-                catch (Exception ex) when (ex is JsonException or IOException)
-                {
-                     potentialPath = Path.GetDirectoryName(scoopConfigPath);
-                    if (IsValidScoopDirectory(potentialPath))
-                    {
-                         return potentialPath;
-                    }
-                }
+                return commandRoot;
             }
         }
 
-        potentialPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "scoop");
-        if (IsValidScoopDirectory(potentialPath)) return potentialPath;
-
-
-        if (homeDir == null) return null;
-        potentialPath = Path.Combine(homeDir, "scoop");
-        return IsValidScoopDirectory(potentialPath) ? potentialPath : null;
+        var defaultUserPath = homeDir == null
+            ? null
+            : GetValidScoopDirectory(Path.Combine(homeDir, "scoop"));
+        return defaultUserPath != null
+               && (globalPath == null || !PathsEqual(defaultUserPath, globalPath))
+            ? defaultUserPath
+            : null;
     }
-    
-    // Helper function to validate a potential Scoop directory
-    private static bool IsValidScoopDirectory(string? path)
+
+    private static string? GetScoopGlobalHome(Settings settings)
     {
-        if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
+        var configuredPath = GetValidScoopDirectory(settings.ScoopGlobalHome);
+        if (configuredPath != null)
         {
-            return false;
+            return configuredPath;
         }
-        return Directory.Exists(Path.Combine(path, "apps"));
+
+        var globalPath = GetValidScoopDirectory(Environment.GetEnvironmentVariable("SCOOP_GLOBAL"));
+        if (globalPath != null)
+        {
+            return globalPath;
+        }
+
+        var homeDir = Environment.GetEnvironmentVariable("USERPROFILE");
+        var parsedConfig = LoadScoopConfig(homeDir);
+        var configPath = GetValidScoopDirectory(parsedConfig?.GlobalPath);
+        if (configPath != null)
+        {
+            return configPath;
+        }
+
+        var defaultGlobalPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "scoop");
+        return GetValidScoopDirectory(defaultGlobalPath);
     }
-    
+
+    private static ScoopConfig? LoadScoopConfig(string? homeDir)
+    {
+        var configPath = GetScoopConfigFilePath(homeDir);
+        if (!File.Exists(configPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<ScoopConfig>(
+                File.ReadAllText(configPath),
+                new JsonSerializerOptions
+                {
+                    ReadCommentHandling = JsonCommentHandling.Skip,
+                    PropertyNameCaseInsensitive = true
+                });
+        }
+        catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static string? GetValidScoopDirectory(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+        {
+            return null;
+        }
+
+        return Directory.Exists(Path.Combine(path, "apps")) ? path : null;
+    }
+
+    private static IEnumerable<string> GetScoopCommandRoots()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            yield break;
+        }
+
+        var output = RunCommand("where", "scoop");
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            yield break;
+        }
+
+        foreach (var commandPath in output.Split(
+                     new[] { '\r', '\n' },
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            var directory = Path.GetDirectoryName(commandPath.Trim());
+            if (directory == null)
+            {
+                continue;
+            }
+
+            var root = Path.GetFileName(directory).Equals("shims", StringComparison.OrdinalIgnoreCase)
+                ? Path.GetDirectoryName(directory)
+                : directory;
+            var validRoot = GetValidScoopDirectory(root);
+            if (validRoot != null)
+            {
+                yield return validRoot;
+            }
+        }
+    }
+
     // Helper function to run a command and get its standard output
     private static string? RunCommand(string fileName, string arguments)
     {
@@ -197,8 +251,9 @@ public static class ScoopInstance
     /// </summary>
     public static void LoadInstance(Settings settings)
     {
-        ScoopHomePath = GetScoopHome(settings);
-        ScoopConfigFilePath = GetScoopConfigFilePath(ScoopHomePath);
+        ScoopGlobalHomePath = GetScoopGlobalHome(settings);
+        ScoopHomePath = GetScoopHome(settings, ScoopGlobalHomePath);
+        ScoopConfigFilePath = GetScoopConfigFilePath(Environment.GetEnvironmentVariable("USERPROFILE"));
         ScoopIcon = LoadIcon("scoop-icon.png")!;
         HomeIcon = LoadIcon("home.png")!;
         InstallIcon = LoadIcon("install.png")!;
@@ -209,7 +264,120 @@ public static class ScoopInstance
 
     public static void LoadScoopHome(Settings settings)
     {
-        ScoopHomePath = GetScoopHome(settings);
+        ScoopGlobalHomePath = GetScoopGlobalHome(settings);
+        ScoopHomePath = GetScoopHome(settings, ScoopGlobalHomePath);
+        ScoopStatusHelper.InvalidateCache();
+        SearchHelper.InvalidateCache();
+    }
+
+    public static IReadOnlyList<ScoopInstallation> GetInstallations()
+    {
+        var installations = new List<ScoopInstallation>();
+        AddInstallation(installations, ScoopHomePath, ScoopInstallScope.User);
+        AddInstallation(installations, ScoopGlobalHomePath, ScoopInstallScope.Global);
+        return installations;
+    }
+
+    public static bool HasInstallation => GetInstallations().Count > 0;
+
+    public static bool IsAdministrator()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var identity = WindowsIdentity.GetCurrent();
+            return new WindowsPrincipal(identity)
+                .IsInRole(WindowsBuiltInRole.Administrator);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    public static ScoopInstallation? GetInstallation(ScoopInstallScope scope)
+    {
+        return GetInstallations().FirstOrDefault(item => item.Scope == scope);
+    }
+
+    public static string GetPrimaryRootPath() =>
+        GetInstallations().FirstOrDefault()?.RootPath
+        ?? throw new InvalidOperationException("Scoop installation not found.");
+
+    public static IEnumerable<ScoopAppInstallation> GetInstalledApps(
+        IReadOnlyList<ScoopInstallation>? installations = null,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var installation in installations ?? GetInstallations())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            string[] appDirectories;
+            try
+            {
+                appDirectories = Directory.GetDirectories(installation.AppsPath);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            foreach (var directoryPath in appDirectories)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var appName = Path.GetFileName(directoryPath);
+                if (!string.IsNullOrEmpty(appName))
+                {
+                    yield return new ScoopAppInstallation(appName, directoryPath, installation);
+                }
+            }
+        }
+    }
+
+    public static string GetDefaultGlobalAppsPath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+        "scoop",
+        "apps");
+
+    public static string GetAppsPath(ScoopInstallScope scope) =>
+        GetInstallation(scope)?.AppsPath
+        ?? throw new InvalidOperationException(
+            scope == ScoopInstallScope.Global
+                ? "global Scoop installation not found."
+                : "Scoop installation not found.");
+
+    private static void AddInstallation(
+        ICollection<ScoopInstallation> installations,
+        string? rootPath,
+        ScoopInstallScope scope)
+    {
+        var validRoot = GetValidScoopDirectory(rootPath);
+        if (validRoot == null
+            || installations.Any(item => PathsEqual(item.RootPath, validRoot)))
+        {
+            return;
+        }
+
+        installations.Add(new ScoopInstallation(validRoot, scope));
+    }
+
+    private static bool PathsEqual(string left, string right)
+    {
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(left),
+                Path.GetFullPath(right),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     /// <summary>
@@ -235,6 +403,10 @@ public static class ScoopInstance
 
     private class ScoopConfig
     {
+        [JsonPropertyName("root_path")]
         public string? RootPath { get; set; }
+
+        [JsonPropertyName("global_path")]
+        public string? GlobalPath { get; set; }
     }
 }

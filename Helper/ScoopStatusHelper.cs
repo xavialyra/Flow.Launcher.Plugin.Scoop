@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -42,6 +44,7 @@ public static class ScoopStatusHelper
 
             var statusJson = await ScoopPwshExecutor.GetStatusJsonAsync(cancellationToken);
             var result = Parse(statusJson);
+            AssignInstallScopes(result);
 
             lock (CacheLock)
             {
@@ -100,6 +103,115 @@ public static class ScoopStatusHelper
             _cacheTimeUtc = default;
             _cacheScoopHome = null;
         }
+    }
+
+    private static void AssignInstallScopes(ScoopStatusReport report)
+    {
+        var userInstallation = ScoopInstance.GetInstallation(ScoopInstallScope.User);
+        var globalInstallation = ScoopInstance.GetInstallation(ScoopInstallScope.Global);
+        if (globalInstallation == null)
+        {
+            foreach (var entry in report.Apps)
+            {
+                entry.InstallScope = ScoopInstallScope.User;
+            }
+
+            return;
+        }
+
+        var occurrences = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var counts = report.Apps
+            .GroupBy(item => GetAppName(item.Name), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in report.Apps)
+        {
+            var appName = GetAppName(entry.Name);
+            var occurrence = occurrences.TryGetValue(appName, out var currentOccurrence)
+                ? currentOccurrence
+                : 0;
+            occurrences[appName] = occurrence + 1;
+
+            var userVersion = userInstallation == null
+                ? null
+                : GetInstalledVersion(userInstallation, appName);
+            var globalVersion = GetInstalledVersion(globalInstallation, appName);
+            var userInstalled = userVersion != null || IsInstalled(userInstallation, appName);
+            var globalInstalled = globalVersion != null || IsInstalled(globalInstallation, appName);
+
+            if (globalInstalled && !userInstalled)
+            {
+                entry.InstallScope = ScoopInstallScope.Global;
+            }
+            else if (userInstalled && !globalInstalled)
+            {
+                entry.InstallScope = ScoopInstallScope.User;
+            }
+            else if (userInstalled && globalInstalled
+                     && string.Equals(globalVersion, entry.InstalledVersion, StringComparison.OrdinalIgnoreCase)
+                     && !string.Equals(userVersion, entry.InstalledVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                entry.InstallScope = ScoopInstallScope.Global;
+            }
+            else if (userInstalled && globalInstalled
+                     && string.Equals(userVersion, entry.InstalledVersion, StringComparison.OrdinalIgnoreCase)
+                     && !string.Equals(globalVersion, entry.InstalledVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                entry.InstallScope = ScoopInstallScope.User;
+            }
+            else if (userInstalled && globalInstalled && counts[appName] > 1)
+            {
+                // Scoop status emits global entries before local entries.
+                entry.InstallScope = occurrence == 0
+                    ? ScoopInstallScope.Global
+                    : ScoopInstallScope.User;
+            }
+            else
+            {
+                // A single status row cannot identify the scope when both copies have the same version.
+                entry.InstallScope = ScoopInstallScope.Unknown;
+            }
+        }
+    }
+
+    private static bool IsInstalled(ScoopInstallation? installation, string appName)
+    {
+        return installation != null
+               && Directory.Exists(Path.Combine(installation.AppsPath, appName));
+    }
+
+    private static string? GetInstalledVersion(ScoopInstallation installation, string appName)
+    {
+        var manifestPath = Path.Combine(
+            installation.AppsPath,
+            appName,
+            "current",
+            "manifest.json");
+        if (!File.Exists(manifestPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            var manifest = document.RootElement.ValueKind == JsonValueKind.Array
+                ? document.RootElement[0]
+                : document.RootElement;
+            return manifest.TryGetProperty("version", out var version)
+                ? version.ToString()
+                : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static string GetAppName(string name)
+    {
+        var separator = name.LastIndexOfAny(new[] { '/', '\\' });
+        return separator >= 0 ? name[(separator + 1)..] : name;
     }
 
     private static bool IsCacheValid(string scoopHome)

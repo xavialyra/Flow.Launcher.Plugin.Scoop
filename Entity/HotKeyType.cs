@@ -7,6 +7,5 @@ public enum HotKeyType
 {
     List,
     Search,
-    Update,
-    Cleanup
+    Update
 }

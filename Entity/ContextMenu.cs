@@ -35,7 +35,9 @@ public class ContextMenu : IContextMenu
         {
             new()
             {
-                Title = $"From bucket {resultContext.Match.Bucket}",
+                Title = resultContext.Match.InstallScope == ScoopInstallScope.Global
+                    ? $"global app from bucket {resultContext.Match.Bucket}"
+                    : $"App from bucket {resultContext.Match.Bucket}",
                 SubTitle = $"Version: {resultContext.Match.Version}, click to check new version",
                 Icon = selectedResult.Icon,
                 AsyncAction = async _ =>
@@ -82,8 +84,13 @@ public class ContextMenu : IContextMenu
                     _context.API.OpenUrl(resultContext.Match.Homepage);
                     return true;
                 }
-            },
-            new()
+            }
+        };
+
+        if (resultContext.Match.InstallScope != ScoopInstallScope.Global
+            || ScoopInstance.IsAdministrator())
+        {
+            results.Add(new Result
             {
                 Title = "Update",
                 SubTitle = "Update the selected app",
@@ -93,8 +100,8 @@ public class ContextMenu : IContextMenu
                     await ScoopPwshExecutor.UpdateAsync(resultContext.Match, _context);
                     return false;
                 }
-            },
-            new()
+            });
+            results.Add(new Result
             {
                 Title = "Uninstall",
                 SubTitle = "Uninstall the selected app",
@@ -104,8 +111,12 @@ public class ContextMenu : IContextMenu
                     await ScoopPwshExecutor.UninstallAsync(resultContext.Match, _context);
                     return false;
                 }
-            },
-            new()
+            });
+        }
+
+        if (resultContext.Match.InstallScope != ScoopInstallScope.Global)
+        {
+            results.Add(new Result
             {
                 Title = "Reset",
                 SubTitle = "Reset the selected app",
@@ -115,8 +126,8 @@ public class ContextMenu : IContextMenu
                     await ScoopPwshExecutor.ResetAsync(resultContext.Match, _context);
                     return false;
                 }
-            }
-        };
+            });
+        }
 
         return results;
     }
@@ -142,19 +153,50 @@ public class ContextMenu : IContextMenu
                     return true;
                 }
             },
-            new()
-            {
-                Title = "Install",
-                SubTitle = "Install the selected app",
-                Icon = () => ScoopInstance.InstallIcon,
-                AsyncAction = async _ =>
-                {
-                    await ScoopPwshExecutor.InstallAsync(resultContext.Match, _context);
-                    return false;
-                }
-            }
+            CreateInstallResult(resultContext.Match)
         };
 
+        if (ScoopInstance.IsAdministrator())
+        {
+            results.Add(CreateGlobalInstallResult(resultContext.Match));
+        }
+
         return results;
+    }
+
+    private Result CreateInstallResult(Match match)
+    {
+        var installationPath = ScoopInstance.GetInstallation(ScoopInstallScope.User)?.AppsPath
+            ?? "Scoop apps directory";
+
+        return new Result
+        {
+            Title = "Install",
+            SubTitle = $"Install the selected app to {installationPath}",
+            Icon = () => ScoopInstance.InstallIcon,
+            AsyncAction = async _ =>
+            {
+                await ScoopPwshExecutor.InstallAsync(match, _context);
+                return false;
+            }
+        };
+    }
+
+    private Result CreateGlobalInstallResult(Match match)
+    {
+        var installationPath = ScoopInstance.GetInstallation(ScoopInstallScope.Global)?.AppsPath
+            ?? ScoopInstance.GetDefaultGlobalAppsPath();
+
+        return new Result
+        {
+            Title = "Install (global)",
+            SubTitle = $"Install the selected app to {installationPath}",
+            Icon = () => ScoopInstance.InstallIcon,
+            AsyncAction = async _ =>
+            {
+                await ScoopPwshExecutor.InstallGlobalAsync(match, _context);
+                return false;
+            }
+        };
     }
 }

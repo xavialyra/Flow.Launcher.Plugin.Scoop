@@ -7,4 +7,5 @@ public sealed class ScoopStatusEntry
     public string LatestVersion { get; init; } = string.Empty;
     public string MissingDependencies { get; init; } = string.Empty;
     public string Info { get; init; } = string.Empty;
+    public ScoopInstallScope InstallScope { get; set; } = ScoopInstallScope.Unknown;
 }

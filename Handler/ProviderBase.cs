@@ -45,7 +45,7 @@ public abstract class ProviderBase
 
     public async Task<List<Result>> Handle(string keyword, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(ScoopInstance.ScoopHomePath))
+        if (!ScoopInstance.HasInstallation)
         {
             return ScoopDetectionFailedResult;
         }

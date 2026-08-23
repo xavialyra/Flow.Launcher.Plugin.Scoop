@@ -26,6 +26,14 @@ public class Scoop : IAsyncPlugin, IContextMenu, ISettingProvider
         _contextMenu = new ContextMenu(context);
         _settings = _context.API.LoadSettingJsonStorage<Settings>();
         ScoopInstance.LoadInstance(_settings);
+        var installations = ScoopInstance.GetInstallations();
+        var detectedRoots = installations.Count == 0
+            ? "none"
+            : string.Join(", ", installations.Select(item =>
+                $"{item.Scope}: root={item.RootPath}, apps={item.AppsPath}"));
+        _context.API.LogInfo(
+            nameof(Scoop),
+            $"Detected Scoop installations: {detectedRoots}; administrator={ScoopInstance.IsAdministrator()}");
         return Task.CompletedTask;
     }
 

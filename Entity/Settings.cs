@@ -3,7 +3,8 @@
 public class Settings : BaseModel
 {
     private string _scoopHome = "";
-    
+    private string _scoopGlobalHome = "";
+
     public string ScoopHome
     {
         get => _scoopHome;
@@ -14,5 +15,16 @@ public class Settings : BaseModel
             ScoopInstance.LoadScoopHome(this);
         }
     }
-    
+
+    public string ScoopGlobalHome
+    {
+        get => _scoopGlobalHome;
+        set
+        {
+            _scoopGlobalHome = value;
+            OnPropertyChanged();
+            ScoopInstance.LoadScoopHome(this);
+        }
+    }
+
 }
