@@ -42,6 +42,7 @@ This plugin provides the following functionality:
     *   Selecting an application updates it in its detected user or global installation scope. Global update actions are available only when Flow Launcher runs as administrator.
     *   **Update Scoop and buckets:** Runs `scoop update`.
     *   **Update all user applications:** Runs `scoop update --all`.
-    *   **Update all global applications:** Updates each global app with `scoop update <app> --global` when a global Scoop installation is detected and Flow Launcher runs as administrator.
+    *   **Update all global applications:** Runs `scoop update --all --global` when a global Scoop installation is detected and Flow Launcher runs as administrator.
+    *   Entering `*` after `update` immediately opens the available batch actions without waiting for the status scan.
 
 ![PixPin_2025-03-23_18-24-14](https://github.com/user-attachments/assets/d3583a01-03a3-4a38-afe4-3d55ba142cf0)

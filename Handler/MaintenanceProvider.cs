@@ -28,7 +28,10 @@ public class MaintenanceProvider : ProviderBase
     {
         if (IsAllTarget(target))
         {
-            return new List<Result>();
+            var wildcardInstalledApps = ScoopInstance.GetInstalledApps(cancellationToken: cancellationToken)
+                .Where(item => !string.Equals(item.Name, "scoop", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            return GetAllUpdateResults(wildcardInstalledApps, ScoopInstance.IsAdministrator());
         }
 
         var filter = target;
@@ -61,25 +64,8 @@ public class MaintenanceProvider : ProviderBase
                 subTitle: "scoop update",
                 icon: () => ScoopInstance.UpdateIcon,
                 execute: ScoopPwshExecutor.UpdateScoopAsync));
-            if (installedApps.Any(item => item.Installation.Scope == ScoopInstallScope.User))
-            {
-                results.Add(CreateCommandResult(
-                    title: "Update all user applications",
-                    subTitle: "scoop update --all",
-                    icon: () => ScoopInstance.UpdateIcon,
-                    execute: ScoopPwshExecutor.UpdateAllAsync));
-            }
-
-            if (canUpdateGlobal
-                && installedApps.Any(item => item.Installation.Scope == ScoopInstallScope.Global))
-            {
-                results.Add(CreateCommandResult(
-                    title: "Update all global applications",
-                    subTitle: "scoop update <app> --global",
-                    icon: () => ScoopInstance.UpdateIcon,
-                    execute: ScoopPwshExecutor.UpdateAllGlobalAsync));
-            }
-            else if (hiddenGlobalUpdates)
+            results.AddRange(GetAllUpdateResults(installedApps, canUpdateGlobal));
+            if (hiddenGlobalUpdates)
             {
                 results.Add(CreateMessageResult(
                     "Global application updates require administrator privileges"));
@@ -157,6 +143,33 @@ public class MaintenanceProvider : ProviderBase
         {
             CreateMessageResult("No application updates available")
         };
+    }
+
+    private List<Result> GetAllUpdateResults(
+        IReadOnlyList<ScoopAppInstallation> installedApps,
+        bool canUpdateGlobal)
+    {
+        var results = new List<Result>();
+        if (installedApps.Any(item => item.Installation.Scope == ScoopInstallScope.User))
+        {
+            results.Add(CreateCommandResult(
+                title: "Update all user applications",
+                subTitle: "scoop update --all",
+                icon: () => ScoopInstance.UpdateIcon,
+                execute: ScoopPwshExecutor.UpdateAllAsync));
+        }
+
+        if (canUpdateGlobal
+            && installedApps.Any(item => item.Installation.Scope == ScoopInstallScope.Global))
+        {
+            results.Add(CreateCommandResult(
+                title: "Update all global applications",
+                subTitle: "scoop update --all --global",
+                icon: () => ScoopInstance.UpdateIcon,
+                execute: ScoopPwshExecutor.UpdateAllGlobalAsync));
+        }
+
+        return results;
     }
 
     private IEnumerable<Result> CreateUpdateResults(
@@ -285,8 +298,6 @@ public class MaintenanceProvider : ProviderBase
 
     private static bool IsAllTarget(string target)
     {
-        return target == "*"
-               || target.Equals("--all", StringComparison.OrdinalIgnoreCase)
-               || target.Equals("-a", StringComparison.OrdinalIgnoreCase);
+        return target == "*";
     }
 }
